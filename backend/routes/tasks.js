@@ -1,20 +1,98 @@
-const router = require('express').Router();
+const express = require('express');
 const Task = require('../models/Task');
-const auth = require('../middleware/auth');
+const protect = require('../middleware/auth');
+const adminOnly = require('../middleware/adminMiddleware');
 
-router.post('/', auth, async (req,res)=>{
-  const task = await Task.create(req.body);
-  res.json(task);
+const router = express.Router();
+
+// CREATE TASK
+router.post('/', protect, adminOnly, async (req, res) => {
+  try {
+    const { title, description, project, assignedTo, dueDate } = req.body;
+
+    if (!title || !description || !project || !assignedTo || !dueDate) {
+      return res.status(400).json({ message: 'All fields required' });
+    }
+
+    const task = await Task.create({
+      title,
+      description,
+      project,
+      assignedTo,
+      dueDate,
+      status: 'Pending',
+    });
+
+    res.status(201).json(task);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
-router.get('/', auth, async (req,res)=>{
-  const tasks = await Task.find().populate('assignedTo project');
-  res.json(tasks);
+// GET TASKS
+router.get('/', protect, async (req, res) => {
+  try {
+    let tasks;
+
+    if (req.user.role.toLowerCase() === 'admin') {
+      tasks = await Task.find()
+        .populate('project', 'name')
+        .populate('assignedTo', 'name email');
+    } else {
+      tasks = await Task.find({
+        assignedTo: req.user._id,
+      })
+        .populate('project', 'name')
+        .populate('assignedTo', 'name email');
+    }
+
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
-router.put('/:id', auth, async (req,res)=>{
-  const updated = await Task.findByIdAndUpdate(req.params.id, req.body, {new:true});
-  res.json(updated);
+// UPDATE TASK STATUS
+router.put('/:id', protect, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    if (
+      req.user.role.toLowerCase() !== 'admin' &&
+      task.assignedTo.toString() !== req.user._id.toString()
+    ) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    task.status = req.body.status || task.status;
+
+    await task.save();
+
+    res.json(task);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE TASK
+router.delete('/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    await task.deleteOne();
+
+    res.json({ message: 'Task deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 module.exports = router;
