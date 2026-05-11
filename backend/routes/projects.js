@@ -2,17 +2,26 @@ const express = require('express');
 const Project = require('../models/Project');
 const User = require('../models/User');
 const protect = require('../middleware/auth');
-const adminOnly = require('../middleware/adminMiddleware');
 
 const router = express.Router();
 
-// CREATE PROJECT
-router.post('/', protect, adminOnly, async (req, res) => {
+
+router.post('/', protect, async (req, res) => {
   try {
     const { name, description } = req.body;
 
+
     if (!name || !description) {
-      return res.status(400).json({ message: 'All fields required' });
+      return res.status(400).json({
+        message: 'Project name and description are required',
+      });
+    }
+
+    
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        message: 'Unauthorized user',
+      });
     }
 
     const project = await Project.create({
@@ -22,28 +31,25 @@ router.post('/', protect, adminOnly, async (req, res) => {
       teamMembers: [],
     });
 
-    res.status(201).json(project);
+    const populatedProject = await Project.findById(project._id)
+      .populate('teamMembers', 'name email')
+      .populate('createdBy', 'name email');
+
+    res.status(201).json(populatedProject);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('PROJECT CREATION ERROR:', error);
+
+    res.status(500).json({
+      message: error.message,
+    });
   }
 });
 
-// GET PROJECTS
 router.get('/', protect, async (req, res) => {
   try {
-    let projects;
-
-    if (req.user.role.toLowerCase() === 'admin') {
-      projects = await Project.find()
-        .populate('teamMembers', 'name email')
-        .populate('createdBy', 'name');
-    } else {
-      projects = await Project.find({
-        teamMembers: req.user._id,
-      })
-        .populate('teamMembers', 'name email')
-        .populate('createdBy', 'name');
-    }
+    const projects = await Project.find()
+      .populate('teamMembers', 'name email')
+      .populate('createdBy', 'name');
 
     res.json(projects);
   } catch (error) {
@@ -51,8 +57,7 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-// DELETE PROJECT
-router.delete('/:id', protect, adminOnly, async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
 
@@ -67,8 +72,6 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
-// GET MEMBERS
 router.get('/members', protect, async (req, res) => {
   try {
     const members = await User.find({
@@ -81,8 +84,8 @@ router.get('/members', protect, async (req, res) => {
   }
 });
 
-// ADD MEMBER
-router.put('/:id/add-member', protect, adminOnly, async (req, res) => {
+
+router.put('/:id/add-member', protect, async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -104,8 +107,7 @@ router.put('/:id/add-member', protect, adminOnly, async (req, res) => {
   }
 });
 
-// REMOVE MEMBER
-router.put('/:id/remove-member', protect, adminOnly, async (req, res) => {
+router.put('/:id/remove-member', protect, async (req, res) => {
   try {
     const { userId } = req.body;
 

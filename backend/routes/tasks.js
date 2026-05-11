@@ -1,12 +1,11 @@
 const express = require('express');
 const Task = require('../models/Task');
 const protect = require('../middleware/auth');
-const adminOnly = require('../middleware/adminMiddleware');
 
 const router = express.Router();
 
-// CREATE TASK
-router.post('/', protect, adminOnly, async (req, res) => {
+
+router.post('/', protect, async (req, res) => {
   try {
     const { title, description, project, assignedTo, dueDate } = req.body;
 
@@ -29,30 +28,18 @@ router.post('/', protect, adminOnly, async (req, res) => {
   }
 });
 
-// GET TASKS
+
 router.get('/', protect, async (req, res) => {
   try {
-    let tasks;
-
-    if (req.user.role.toLowerCase() === 'admin') {
-      tasks = await Task.find()
-        .populate('project', 'name')
-        .populate('assignedTo', 'name email');
-    } else {
-      tasks = await Task.find({
-        assignedTo: req.user._id,
-      })
-        .populate('project', 'name')
-        .populate('assignedTo', 'name email');
-    }
-
+    const tasks = await Task.find()
+      .populate('project', 'name')
+      .populate('assignedTo', 'name email');
     res.json(tasks);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// UPDATE TASK STATUS
 router.put('/:id', protect, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -78,8 +65,7 @@ router.put('/:id', protect, async (req, res) => {
   }
 });
 
-// DELETE TASK
-router.delete('/:id', protect, adminOnly, async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
 
